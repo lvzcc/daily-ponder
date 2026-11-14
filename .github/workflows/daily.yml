@@ -1,4 +1,4 @@
-name: 每日一问
+name: 睡醒消息
 
 # ⚠️ 时区很关键：GitHub Actions 的 cron 用 UTC
 #    北京时间 08:00 = UTC 00:00
@@ -37,6 +37,7 @@ jobs:
         run: python daily.py
 
       - name: 记录历史（用于下次去重）
+        if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
