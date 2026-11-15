@@ -4,8 +4,8 @@ name: 睡醒消息
 #    北京时间 08:00 = UTC 00:00
 on:
   schedule:
-    - cron: '0 2 * * *'      # UTC 02:00 = 北京 10:00（主）
-    - cron: '37 2 * * *'     # UTC 02:37 = 北京 10:37（备，避开整点延迟）
+    - cron: '0 0 * * *'      # UTC 00:00 = 北京 08:00（主）
+    - cron: '37 0 * * *'     # UTC 00:37 = 北京 08:37（备，避开整点延迟）
   workflow_dispatch:
   
 permissions:
