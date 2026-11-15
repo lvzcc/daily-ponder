@@ -201,7 +201,55 @@ def parse_question_json(text: str) -> dict:
 
 
 # ---------------------------------------------------------------- ② 写理解
-UNDERSTAND_TEMPLATE = """下面是我之前给出的一道题。请你写一段「理解」——**不是答案**。
+UNDERSTAND_TEMPLATE_CUT = """下面是我之前给出的一道题。请你写一段「理解」——**不是答案**。
+
+## 题目
+
+{scene_block}
+
+## 结构（三段）
+
+**第一段 · 本质（2~4 句）**
+
+直接点出这道题真正在权衡什么。不复述题面，不铺垫，不寒暄。
+参考句式："这道题表面上是 X，实际上是在赌 Y。"
+
+这一段是全篇的地基，必须**准**。
+
+**第二段 · 切口（全篇的灵魂）**
+
+不要"两端都分析一遍"。选**一个**意想不到的角度切进去，例如：
+
+- 质疑这道题本身预设了什么（它是不是问错了？谁没被算进去？）
+- 抓一个旁人不会注意的细节往死里挖
+- 换一个时间尺度（十年后回看这件事）或换一个利益相关方
+- 用一个看似无关的类比、小故事照过去
+
+**这一段要野，要有个人判断，要让人产生"还能这么看？"的反应。**
+
+**第三段 · 深挖**
+
+顺着上面那个切口往下挖，给 2~3 个思考维度，点出**最容易被忽略的那个变量**。
+
+⚠️ **不要面面俱到。** 宁可只挖一个深的，不要铺五个浅的。清单式罗列是这篇的最大死法。
+
+**收尾**
+
+一句反向追问。**不总结、不升华、不写"所以我们应该……"**
+
+## 硬性要求
+
+1. **不站队、不给结论**。不要出现"应该选 A""A 更合理"。
+2. **不复述题面**，读者刚看过，别浪费他的注意力。
+3. **不用"两端都有道理，看你更看重什么"这种和稀泥的收法。**
+4. **语气像朋友深夜聊天**，不要教科书腔，不要写"本题考察……"。
+5. 篇幅 300~800 字；题目值得挖可以写长，但**每句都要推进**，绝不灌水。
+
+直接输出正文，不要 JSON，不要标题，不要 markdown 代码块。
+"""
+
+
+UNDERSTAND_TEMPLATE_ANALYTIC = """下面是我之前给出的一道题。请你写一段「理解」——**不是答案**。
 
 ## 题目
 
@@ -218,22 +266,34 @@ UNDERSTAND_TEMPLATE = """下面是我之前给出的一道题。请你写一段�
 
 ## 篇幅
 
-**不设上限。** 这道题值得深挖就写深，通常 300~800 字；如果它牵涉的层面多，写到 1500 字以上也可以。
+**不设上限。** 这道题值得深挖就写深，通常 300~800 字；如果牵涉的层面多，写到 1500 字以上也可以。
 **但绝不许灌水。** 不重复题面，不堆砌术语，每一句都要推进理解。
 
 直接输出正文，不要 JSON，不要标题，不要 markdown 代码块。
 """
 
 
-def generate_understanding(item: dict) -> str:
+# 风格池 —— 纯随机，不按历史做均衡（用户明确要求「不需要趋于稳定的随机」）。
+# 也就是说：可能连着三天都是同一种，也可能交替出现。掷骰子就是这样。
+UNDERSTAND_STYLES = {
+    "analytic": UNDERSTAND_TEMPLATE_ANALYTIC,  # 系统性深挖：把维度摊开，一处一处走
+    "cut": UNDERSTAND_TEMPLATE_CUT,            # 一刀切入：抓一个冷门细节，往死里挖
+}
+
+
+def generate_understanding(item: dict) -> tuple:
+    """返回 (理解正文, 用了哪种风格)"""
     scenario = (item.get("scenario") or "").strip()
     question = (item.get("question") or "").strip()
     if scenario:
         scene_block = f"场景：{scenario}\n\n问题：{question}"
     else:
         scene_block = f"问题：{question}"
-    prompt = UNDERSTAND_TEMPLATE.format(scene_block=scene_block)
-    return _chat(prompt, temperature=1.0, max_tokens=4000).strip()
+
+    style = random.choice(list(UNDERSTAND_STYLES.keys()))
+    prompt = UNDERSTAND_STYLES[style].format(scene_block=scene_block)
+    text = _chat(prompt, temperature=1.0, max_tokens=4000).strip()
+    return text, style
 
 
 # ---------------------------------------------------------------- 推送
@@ -327,14 +387,15 @@ def main() -> int:
     if pending:
         issue = pending.get("issue")
         print(f"[+] 为第 {issue} 期写理解…")
-        understanding = generate_understanding(pending)
-        print(f"    理解 {len(understanding)} 字")
+        understanding, style = generate_understanding(pending)
+        print(f"    理解 {len(understanding)} 字（风格：{style}）")
 
         content = build_understanding_content(pending, understanding)
         result = push(f"第 {issue} 期 · {LETTER}（理解）", content)
         print(f"[+] 理解推送成功: {result.get('msg')}（{len(content)} 字）")
 
         pending["understanding"] = understanding
+        pending["understanding_style"] = style  # 记下来，方便以后回看用了哪种
         save_history(history)  # 先存，防止后面失败导致重复推送
     else:
         print("[=] 没有待写理解的题（第一期或已全部写完）")
