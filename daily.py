@@ -182,8 +182,18 @@ def generate_question(domain: str, recent_text: str, recent_domains_text: str, t
         recent=recent_text,
         recent_domains=recent_domains_text,
     )
-    raw = _chat(prompt, temperature=1.2, max_tokens=3000)
-    return parse_question_json(raw)
+    # 模型偶尔会返回不合法的 JSON（多一句解释、少个引号、或者被截断）。
+    # 这不是网络问题，_chat 内部的重试救不到它，必须在这里单独重试。
+    last_err = None
+    for attempt in range(1, 4):
+        raw = _chat(prompt, temperature=1.2, max_tokens=3000)
+        try:
+            return parse_question_json(raw)
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            print(f"[!] 第 {attempt} 次出题解析失败: {exc}")
+            time.sleep(3 * attempt)
+    raise SystemExit(f"[x] 出题最终失败（3 次都没拿到合法 JSON）: {last_err}")
 
 
 def parse_question_json(text: str) -> dict:
